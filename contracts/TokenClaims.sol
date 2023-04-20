@@ -30,9 +30,17 @@ contract TokenVesting {
         require(_vestingSchedule.start != 0, "Vesting not started yet.");
         _;
     }
+    
+    modifier nonReentrant() {
+        require(!_nonReentrant[msg.sender], "Claims: reentrancy attack");
+        _nonReentrant[msg.sender] = true;
+        _;
+        _nonReentrant[msg.sender] = false;
+        
 
     mapping (address => uint256) private allocations;
     mapping (address => uint256) private claimed;
+    mapping(address => bool) private _nonReentrant;
     uint256 private totalVestedAmount;
     uint256 private totalClaimedAmount;
 
@@ -96,7 +104,7 @@ State modifier fonctions
         }
     }
 
-    function claim () public vestingScheduleExists {
+    function claim () public nonReentrant vestingScheduleExists {
         int256 amount = getClaimable();
         require(amount > 0, "Negative amount");
         uint256 _amount = uint256(amount);
