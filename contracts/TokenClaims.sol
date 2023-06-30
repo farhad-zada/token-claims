@@ -1,30 +1,25 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.0;
+pragma solidity ^0.8.18;
 
 import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import {IERC20Upgradeable} from "@openzeppelin/contracts-upgradeable/token/ERC20/IERC20Upgradeable.sol";
 import {SafeERC20Upgradeable} from "@openzeppelin/contracts-upgradeable/token/ERC20/utils/SafeERC20Upgradeable.sol";
+import {UUPSUpgradeable} from "@openzeppelin/contracts/proxy/utils/UUPSUpgradeable.sol";
+import {OwnableUpgradeable} from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 
-
-contract TokenVesting {
+contract TokenClaims is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 
     using SafeERC20Upgradeable for IERC20Upgradeable;
 
     IERC20Upgradeable public  token; 
     string public label; 
-    address public owner;
 
 
-    constructor (IERC20Upgradeable _token, string memory _label) {
-        token = _token;
-        label = _label;
-        owner = msg.sender;
+    constructor () { 
+        _disableInitializers();
     }
 
-    modifier onlyOwner () {
-        require(msg.sender == owner, "Owner modifier: not owner");
-        _;
-    }
+    function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
 
     modifier vestingScheduleExists {
         require(_vestingSchedule.start != 0, "Vesting not started yet.");
@@ -36,11 +31,17 @@ contract TokenVesting {
         _nonReentrant[msg.sender] = true;
         _;
         _nonReentrant[msg.sender] = false;
-        
+    }
+
+    modifier admin () {
+        require (admins[msg.sender], "Claims: not admin");
+        _;
+    }
 
     mapping (address => uint256) private allocations;
     mapping (address => uint256) private claimed;
-    mapping(address => bool) private _nonReentrant;
+    mapping (address => bool) private _nonReentrant;
+    mapping (address => bool) private admins;
     uint256 private totalVestedAmount;
     uint256 private totalClaimedAmount;
 
@@ -66,17 +67,32 @@ contract TokenVesting {
     event Allocate  (address to, uint256 amount);
 
 
+    function initialize (address _token, string memory _label) public initializer {
+        __Ownable_init();
+        token = IERC20Upgradeable(_token);
+        label = _label;
+        admins[msg.sender] = true;
+    }
+
+
 /*
 State modifier fonctions
-*/
+*/  
 
+    function setAdmin (address _admin, bool _status) public onlyOwner {
+        admins[_admin] = _status;
+    }
 
-    function setVestingSchedule (uint256 _start, uint256 _rounds, uint256 _interval) public onlyOwner {
+    function updateToken (address _token) public onlyOwner {
+        token = IERC20Upgradeable(_token);
+    }
+
+    function setVestingSchedule (uint256 _start, uint256 _rounds, uint256 _interval) public admin {
         require (_rounds > 0 && _interval > 0 && _start + _rounds * _interval > block.timestamp, "Not valid input.");
         _vestingSchedule = VestingSchedule(_start, _rounds, _interval);
     }
 
-    function setAllocations (address[] calldata _beneficiaries, uint256[] calldata amounts) public onlyOwner {
+    function setAllocations (address[] calldata _beneficiaries, uint256[] calldata amounts, bool add) public admin {
         
         require(_beneficiaries.length == amounts.length, "Unmatched addresses and amounts.");
 
@@ -91,7 +107,7 @@ State modifier fonctions
                 addressIndices[_beneficiaries[i]] = _allocated.length - 1;
                 addressExists[_beneficiaries[i]] = true;
                 totalVestedAmount += amounts[i];
-                allocations[_beneficiaries[i]] = amounts[i];
+                allocations[_beneficiaries[i]] = add? amounts[i] + allocations[_beneficiaries[i]] : amounts[i];
                 continue;
             } else {
                 totalVestedAmount -= allocations[_beneficiaries[i]];
@@ -115,7 +131,7 @@ State modifier fonctions
         token.transfer(msg.sender, _amount);   
     }
 
-    function setLabel (string memory newLabel) public onlyOwner {
+    function setLabel (string memory newLabel) public admin {
         label = newLabel;
     }
 
@@ -129,26 +145,30 @@ State modifier fonctions
 State read functions 
 */
 
-    function getLeftout () public view onlyOwner returns (int256) {
+    function getAdmin (address account) public view returns (bool) {
+        return admins[account];
+    }
+
+    function getLeftout () public view admin returns (int256) {
         return int256(totalVestedAmount) - int256(totalClaimedAmount);
     }
-    function allAllocations () public view onlyOwner returns (Allocated[] memory) {
+    function allAllocations () public view admin returns (Allocated[] memory) {
         return _allocated;
     }
 
-    function totalVested () public view onlyOwner returns (uint256) {
+    function totalVested () public view admin returns (uint256) {
         return totalVestedAmount;
     }
 
-    function singleAllocation (address who) public view onlyOwner returns (uint256) {
+    function singleAllocation (address who) public view admin returns (uint256) {
         return allocations[who];
     }
 
-    function totalClaimed () public view onlyOwner returns (uint256) {
+    function totalClaimed () public view admin returns (uint256) {
         return totalClaimedAmount;
     }
 
-    function singleClaimed (address who) public view onlyOwner returns (uint256) {
+    function singleClaimed (address who) public view admin returns (uint256) {
         return claimed[who];
     }
 
