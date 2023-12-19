@@ -7,7 +7,7 @@ import {SafeERC20Upgradeable} from "@openzeppelin/contracts-upgradeable/token/ER
 import {UUPSUpgradeable} from "@openzeppelin/contracts/proxy/utils/UUPSUpgradeable.sol";
 import {OwnableUpgradeable} from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 
-contract TokenClaims is Initializable, OwnableUpgradeable, UUPSUpgradeable {
+contract Claims is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 
     using SafeERC20Upgradeable for IERC20Upgradeable;
 
